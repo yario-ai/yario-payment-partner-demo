@@ -154,7 +154,7 @@ If you want Yario to adapt this implementation to your platform, we can deliver
 a separately scoped integration project **from USD 2,000**. The final price
 depends on capabilities and provider complexity; provider fees, legal review
 and non-standard product work are excluded unless the statement of work says
-otherwise. Contact [info@yario.ai](mailto:info@yario.ai?subject=Yario%20partner%20integration%20from%20USD%202000).
+otherwise. To discuss the integration, message [@keaza on Telegram](https://t.me/keaza).
 
 See the [interactive API reference](https://docs.yario.ai/api-reference/developers/integrations/api-reference)
 for the current HTTP contract, or return to the

@@ -86,7 +86,6 @@ database.
 The runner exercises a real Yario test environment:
 
 - profile and capability discovery;
-- test reset;
 - ticket create/read/update;
 - identical replay and changed-body conflict;
 - message roundtrip;
@@ -96,6 +95,12 @@ The runner exercises a real Yario test environment:
 
 No API key, webhook secret, message body or KYC snapshot is written to the
 reports.
+
+The runner does not reset fixtures by default because `/v1/test/reset` rotates
+their IDs and a demo must never expand its allowlist automatically. If the
+reset result IDs have been explicitly pre-approved, set
+`YARIO_RESET_TEST_DATA=true`; otherwise reset separately, then copy the new
+installation/client IDs into the allowlist before running conformance.
 
 ## Production adaptation
 

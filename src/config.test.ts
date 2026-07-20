@@ -14,7 +14,12 @@ const base = {
 test("loads a test-only allowlisted configuration", () => {
   const config = loadConfig(base);
   assert.equal(config.allowLive, false);
+  assert.equal(config.resetTestData, false);
   assert.equal(config.allowedInstallationIds.has(id), true);
+});
+
+test("requires an explicit opt-in before resetting test fixtures", () => {
+  assert.equal(loadConfig({ ...base, YARIO_RESET_TEST_DATA: "true" }).resetTestData, true);
 });
 
 test("refuses a live key unless explicitly enabled", () => {

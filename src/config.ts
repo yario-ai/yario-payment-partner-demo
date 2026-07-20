@@ -8,6 +8,7 @@ export interface DemoConfig {
   allowedInstallationIds: ReadonlySet<string>;
   allowedClientIds: ReadonlySet<string>;
   allowLive: boolean;
+  resetTestData: boolean;
   dataDir: string;
   reportDir: string;
 }
@@ -58,6 +59,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DemoConfig {
     allowedInstallationIds: uuidSet(env, "YARIO_DEMO_INSTALLATION_IDS"),
     allowedClientIds: uuidSet(env, "YARIO_DEMO_CLIENT_IDS"),
     allowLive,
+    resetTestData: env.YARIO_RESET_TEST_DATA?.toLowerCase() === "true",
     dataDir: resolve(env.YARIO_DATA_DIR ?? "./data"),
     reportDir: resolve(env.YARIO_REPORT_DIR ?? "./reports")
   };

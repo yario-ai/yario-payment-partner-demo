@@ -27,7 +27,7 @@ export async function runConformance(config: DemoConfig, client = new YarioClien
     if (!selected) throw new Error("No API installation matches YARIO_DEMO_INSTALLATION_IDS");
   }, "Add an installation returned by /v1/installations to YARIO_DEMO_INSTALLATION_IDS.");
 
-  if (environment === "test") {
+  if (environment === "test" && config.resetTestData) {
     await check(checks, "test.reset", true, async () => {
       const reset = await client.resetTestData();
       if (!config.allowedInstallationIds.has(reset.installationId.toLowerCase())) {
@@ -39,6 +39,14 @@ export async function runConformance(config: DemoConfig, client = new YarioClien
     }, "Use the installationId and testClientId returned by the current test environment.");
     const installations = await client.installations();
     selected = installations.find((item) => config.allowedInstallationIds.has(item.id.toLowerCase()));
+  } else if (environment === "test") {
+    checks.push({
+      code: "test.reset",
+      required: false,
+      status: "skipped",
+      durationMs: 0,
+      remediation: "Set YARIO_RESET_TEST_DATA=true only when the reset result IDs are already explicitly allowlisted."
+    });
   }
 
   let ticketId: string | undefined;

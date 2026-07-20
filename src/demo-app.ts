@@ -248,6 +248,7 @@ function securityHeaders(response: ServerResponse): void {
   response.setHeader("x-content-type-options", "nosniff");
   response.setHeader("x-frame-options", "DENY");
   response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  response.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
 }
 
 function json(response: ServerResponse, status: number, body: object): void {

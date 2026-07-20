@@ -77,6 +77,7 @@ test("protects the demo, runs once and returns only a redacted public report", a
     const anonymous = await fetch(`${base}/api/session`);
     assert.equal(anonymous.status, 401);
     assert.equal(anonymous.headers.get("x-frame-options"), "DENY");
+    assert.equal(anonymous.headers.get("strict-transport-security"), "max-age=31536000; includeSubDomains");
 
     const invalid = await fetch(`${base}/api/session`, {
       method: "POST",

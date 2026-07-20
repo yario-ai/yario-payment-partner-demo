@@ -55,13 +55,20 @@ curl --fail http://localhost:8080/health
 
 ## Partner flow
 
-1. Register at `https://partners.yario.ai/partner/register`.
-2. Complete the partner profile and obtain a `yario_test_...` credential.
-3. Call `/v1/installations` and copy only the synthetic installation and client
+1. Open the partner portal URL supplied by Yario and register the demo
+   organization.
+2. Complete the profile and upload synthetic documents only. On explicitly
+   configured demo stands, allowlisted partners can self-approve
+   `integration.test_access`; this never approves live access.
+3. Accept the published test agreement and store the one-time
+   `yario_test_...` credential in a secret manager.
+4. Call `/v1/installations` and copy only the synthetic installation and client
    IDs into `.env`.
-4. Run `npm run conformance`.
-5. Start the receiver and expose `POST /webhooks/yario` only over HTTPS.
-6. Use the same runner in CI before requesting live access.
+5. Run `npm run conformance`.
+6. Start the receiver and expose `POST /webhooks/yario` only over HTTPS.
+7. Use the same runner in CI before requesting live access.
+8. Revoke the demo credential after the evaluation. Live access always
+   requires separate Yario legal and operator review.
 
 ## Architecture
 

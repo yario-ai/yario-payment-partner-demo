@@ -63,7 +63,7 @@ run.addEventListener("click", async () => {
   progress.hidden = false;
   checks.replaceChildren();
   resultTitle.textContent = "Проверяем интеграцию…";
-  resultSummary.textContent = "Выполняются реальные test-mode вызовы Yario Integration API.";
+  resultSummary.textContent = "Выполняются настоящие запросы к Yario Integration API в тестовой среде.";
   try {
     const report = await request("/api/conformance", { method: "POST", body: "{}" });
     renderReport(report);
@@ -73,7 +73,7 @@ run.addEventListener("click", async () => {
       ? `Повторный запуск будет доступен через ${error.retryAfter || "несколько"} сек.`
       : error.status === 409
         ? "Другой разработчик сейчас выполняет проверку. Повторите через минуту."
-        : "Тестовая среда временно недоступна. Никакие live-операции не выполнялись.";
+        : "Тестовая среда временно недоступна. Операции с реальными клиентами не выполнялись.";
   } finally {
     progress.hidden = true;
     run.disabled = false;
@@ -101,8 +101,8 @@ function renderReport(report) {
   }));
   download.hidden = false;
   runNote.textContent = report.passed
-    ? "Техническая готовность подтверждена. Следующий шаг — отдельный legal/operator live review."
-    : "Используйте remediation в отчёте и ссылки на исходный код.";
+    ? "Техническая готовность подтверждена. Следующий шаг — отдельная юридическая и операционная проверка рабочего доступа."
+    : "Используйте рекомендации в отчёте и ссылки на исходный код.";
 }
 
 function label(status) {

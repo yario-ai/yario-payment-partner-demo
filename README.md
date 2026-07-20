@@ -1,7 +1,10 @@
 # Yario Payment Partner Demo
 
-Public, demo-only reference implementation for a payment or regulated partner
-integrating with the [Yario Integration API](https://docs.yario.ai/docs/developers/integrations).
+This repository is a complete, runnable example for a payment or regulated
+partner integrating with the
+[Yario Integration API](https://docs.yario.ai/docs/developers/integrations).
+It is limited to synthetic data in the test environment and cannot perform
+operations for real customers.
 
 ## Try the hosted demo
 
@@ -25,7 +28,7 @@ Use the documentation in this order:
 3. [Interactive API Reference](https://docs.yario.ai/api-reference/developers/integrations/api-reference) —
    the normative HTTP, security and webhook contract.
 4. [Testing and certification](https://docs.yario.ai/docs/developers/integrations/testing) —
-   expected checks, reports and remediation.
+   expected checks, reports and guidance for fixing failures.
 
 Technical certification proves the test integration. It does not replace
 Yario legal and operator approval for live access.

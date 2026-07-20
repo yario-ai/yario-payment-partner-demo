@@ -23,17 +23,17 @@
   <main>
     <section id="login-view" class="login-shell">
       <div class="login-copy">
-        <span class="eyebrow">Sandbox · Synthetic data only</span>
+        <span class="eyebrow">Тестовая среда · Только учебные данные</span>
         <h1>Пройдите путь интеграции до первого успешного теста</h1>
-        <p>Это работающий reference implementation платёжного/KYC-партнёра. Он вызывает настоящий Yario Integration API в изолированной тестовой среде и показывает результат без ключей и клиентских данных.</p>
+        <p>Это готовый пример интеграции платёжного или KYC-партнёра. Он обращается к настоящему Yario Integration API в изолированной тестовой среде и показывает результат, не раскрывая ключи и данные клиентов.</p>
         <ul class="trust-list">
-          <li>Реальный API и idempotency flow</li>
-          <li>Ticket, message, KYC и webhook checks</li>
-          <li>Исходный код каждого шага открыт на GitHub</li>
+          <li>Настоящие запросы к тестовому API</li>
+          <li>Обращения, сообщения, KYC и автоматические уведомления</li>
+          <li>Открытый исходный код каждого шага на GitHub</li>
         </ul>
       </div>
       <form id="login-form" class="card login-card">
-        <span class="step-number">Demo access</span>
+        <span class="step-number">Доступ к демо</span>
         <h2>Войти в лабораторию</h2>
         <p class="muted">Логин и пароль опубликованы в руководстве для разработчиков.</p>
         <label>Логин<input name="username" autocomplete="username" required></label>
@@ -46,37 +46,37 @@
     <section id="app-view" hidden>
       <div class="hero">
         <div>
-          <span class="eyebrow">Yario Integration Lab</span>
+          <span class="eyebrow">Демо интеграции с Yario</span>
           <h1>От договора до технической готовности — в одном маршруте</h1>
-          <p>Демо воспроизводит партнёрский flow на синтетической фикстуре. Автотест подтверждает техническую готовность, но не заменяет юридическое согласование и live approval.</p>
+          <p>Демо показывает весь путь партнёра на учебных данных. Автоматическая проверка подтверждает техническую готовность, но не заменяет договор и отдельное одобрение рабочего доступа.</p>
         </div>
-        <div class="environment-pill"><span></span> Test environment</div>
+        <div class="environment-pill"><span></span> Тестовая среда</div>
       </div>
 
       <ol class="journey" aria-label="Порядок интеграции">
         <li class="journey-card">
-          <span class="step-number">01 · Legal</span>
+          <span class="step-number">01 · Оформление</span>
           <h2>Получить тестовый доступ</h2>
-          <p>Регистрация партнёра, тестовые документы и условия доступа. Для live потребуется отдельная проверка.</p>
-          <a href="https://docs.yario.ai/docs/developers/integrations/onboarding" target="_blank" rel="noopener">Открыть legal guide →</a>
+          <p>Зарегистрируйте организацию, заполните профиль и примите условия тестирования. Для рабочей среды потребуется отдельная проверка.</p>
+          <a href="https://docs.yario.ai/docs/developers/integrations/onboarding" target="_blank" rel="noopener">Как получить доступ →</a>
         </li>
         <li class="journey-card">
-          <span class="step-number">02 · Build</span>
+          <span class="step-number">02 · Подключение</span>
           <h2>Подключить Integration API</h2>
-          <p>API key остаётся на сервере. Клиент использует stable idempotency keys, bounded retry и installation allowlist.</p>
+          <p>Ключ API хранится только на сервере. Пример защищает повторные запросы, ограничивает число попыток и работает только с разрешёнными тестовыми организациями.</p>
           <a href="https://github.com/yario-ai/yario-payment-partner-demo/tree/main/src" target="_blank" rel="noopener">Посмотреть реализацию →</a>
         </li>
         <li class="journey-card active">
-          <span class="step-number">03 · Test</span>
-          <h2>Запустить conformance</h2>
-          <p>Проверим профиль, изоляцию, tickets, messages, KYC, повтор запросов и подписи webhook.</p>
+          <span class="step-number">03 · Проверка</span>
+          <h2>Проверить интеграцию</h2>
+          <p>Проверим профиль, изоляцию данных, обращения, сообщения, KYC, повтор запросов и подписи автоматических уведомлений.</p>
           <button id="run" class="primary">Запустить полную проверку</button>
           <p id="run-note" class="muted small">Обычно занимает меньше минуты. Одновременно выполняется один безопасный запуск.</p>
         </li>
         <li class="journey-card">
-          <span class="step-number">04 · Live gate</span>
-          <h2>Запросить production review</h2>
-          <p>После успешного теста Yario отдельно проверяет договор, оператора, security и разрешённые live-сценарии.</p>
+          <span class="step-number">04 · Рабочий доступ</span>
+          <h2>Запросить проверку перед запуском</h2>
+          <p>После успешного теста Yario отдельно проверит договор, ответственных сотрудников, безопасность и сценарии для реальных клиентов.</p>
           <a href="https://docs.yario.ai/docs/developers/integrations" target="_blank" rel="noopener">Условия запуска →</a>
         </li>
       </ol>
@@ -84,7 +84,7 @@
       <section id="results" class="results card" aria-live="polite">
         <div class="results-head">
           <div>
-            <span class="eyebrow">Technical certification</span>
+            <span class="eyebrow">Техническая проверка</span>
             <h2 id="result-title">Отчёт ещё не создан</h2>
             <p id="result-summary" class="muted">Запустите полную проверку на шаге 03.</p>
           </div>
@@ -98,7 +98,7 @@
         <div>
           <span class="eyebrow">Нужна помощь с внедрением?</span>
           <h2>Интеграция под ключ — от $2,000</h2>
-          <p>Адаптируем этот reference flow под вашу платёжную или сервисную платформу: API client, webhook receiver, тесты и запуск по отдельному договору подряда. Итоговая цена зависит от scope; комиссии провайдеров, юридическая экспертиза и нестандартные доработки оцениваются отдельно.</p>
+          <p>Адаптируем этот пример под вашу платёжную или сервисную платформу: подключим API, приём автоматических уведомлений, тесты и запуск по отдельному договору подряда. Итоговая цена зависит от состава работ; комиссии провайдеров, юридическая экспертиза и нестандартные доработки оцениваются отдельно.</p>
         </div>
         <a class="primary button-link" href="mailto:info@yario.ai?subject=Интеграция%20с%20Yario%20от%20%242000">Обсудить интеграцию</a>
       </section>
@@ -106,9 +106,9 @@
   </main>
 
   <footer>
-    <span>© Yario · Demo-only reference implementation</span>
-    <a href="https://docs.yario.ai/api-reference/developers/integrations/api-reference" target="_blank" rel="noopener">API Reference</a>
-    <a href="https://github.com/yario-ai/yario-payment-partner-demo/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+    <span>© Yario · Пример интеграции для тестовой среды</span>
+    <a href="https://docs.yario.ai/api-reference/developers/integrations/api-reference" target="_blank" rel="noopener">Справочник API</a>
+    <a href="https://github.com/yario-ai/yario-payment-partner-demo/blob/main/SECURITY.md" target="_blank" rel="noopener">Безопасность</a>
   </footer>
   <script type="module" src="/assets/app.js"></script>
 </body>

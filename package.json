@@ -2,7 +2,7 @@
   "name": "@yario/payment-partner-demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Demo-only reference payment and KYC partner integration for Yario",
+  "description": "Runnable test-environment example of a payment and KYC partner integration with Yario",
   "license": "MIT",
   "type": "module",
   "engines": {

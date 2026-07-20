@@ -11,6 +11,13 @@ export interface DemoConfig {
   resetTestData: boolean;
   dataDir: string;
   reportDir: string;
+  demoUsername: string;
+  demoPassword: string;
+  sessionTtlSeconds: number;
+  runCooldownSeconds: number;
+  secureCookies: boolean;
+  requestTimeoutMs: number;
+  requestAttempts: number;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -61,8 +68,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DemoConfig {
     allowLive,
     resetTestData: env.YARIO_RESET_TEST_DATA?.toLowerCase() === "true",
     dataDir: resolve(env.YARIO_DATA_DIR ?? "./data"),
-    reportDir: resolve(env.YARIO_REPORT_DIR ?? "./reports")
+    reportDir: resolve(env.YARIO_REPORT_DIR ?? "./reports"),
+    demoUsername: required(env, "DEMO_USERNAME"),
+    demoPassword: required(env, "DEMO_PASSWORD"),
+    sessionTtlSeconds: positiveInteger(env, "DEMO_SESSION_TTL_SECONDS", 14_400),
+    runCooldownSeconds: positiveInteger(env, "DEMO_RUN_COOLDOWN_SECONDS", 60),
+    secureCookies: env.DEMO_SECURE_COOKIES?.toLowerCase() !== "false",
+    requestTimeoutMs: positiveInteger(env, "YARIO_REQUEST_TIMEOUT_MS", 15_000),
+    requestAttempts: positiveInteger(env, "YARIO_REQUEST_ATTEMPTS", 6)
   };
+}
+
+function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const value = Number(env[name] ?? fallback);
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`);
+  return value;
 }
 
 export function assertAllowedInstallation(config: DemoConfig, id: string): void {

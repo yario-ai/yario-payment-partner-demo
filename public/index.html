@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Интерактивный пример интеграции платёжного партнёра с Yario Integration API.">
+  <title>Yario Partner Integration Demo</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Yario Partner Demo">
+      <span class="brand-mark">Y</span>
+      <span>Yario <strong>Partner Demo</strong></span>
+    </a>
+    <nav aria-label="Полезные ссылки">
+      <a href="https://docs.yario.ai/docs/developers/integrations" target="_blank" rel="noopener">Документация</a>
+      <a href="https://github.com/yario-ai/yario-payment-partner-demo" target="_blank" rel="noopener">GitHub</a>
+      <button id="logout" class="link-button" hidden>Выйти</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="login-view" class="login-shell">
+      <div class="login-copy">
+        <span class="eyebrow">Sandbox · Synthetic data only</span>
+        <h1>Пройдите путь интеграции до первого успешного теста</h1>
+        <p>Это работающий reference implementation платёжного/KYC-партнёра. Он вызывает настоящий Yario Integration API в изолированной тестовой среде и показывает результат без ключей и клиентских данных.</p>
+        <ul class="trust-list">
+          <li>Реальный API и idempotency flow</li>
+          <li>Ticket, message, KYC и webhook checks</li>
+          <li>Исходный код каждого шага открыт на GitHub</li>
+        </ul>
+      </div>
+      <form id="login-form" class="card login-card">
+        <span class="step-number">Demo access</span>
+        <h2>Войти в лабораторию</h2>
+        <p class="muted">Логин и пароль опубликованы в руководстве для разработчиков.</p>
+        <label>Логин<input name="username" autocomplete="username" required></label>
+        <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">Открыть демо</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="app-view" hidden>
+      <div class="hero">
+        <div>
+          <span class="eyebrow">Yario Integration Lab</span>
+          <h1>От договора до технической готовности — в одном маршруте</h1>
+          <p>Демо воспроизводит партнёрский flow на синтетической фикстуре. Автотест подтверждает техническую готовность, но не заменяет юридическое согласование и live approval.</p>
+        </div>
+        <div class="environment-pill"><span></span> Test environment</div>
+      </div>
+
+      <ol class="journey" aria-label="Порядок интеграции">
+        <li class="journey-card">
+          <span class="step-number">01 · Legal</span>
+          <h2>Получить тестовый доступ</h2>
+          <p>Регистрация партнёра, тестовые документы и условия доступа. Для live потребуется отдельная проверка.</p>
+          <a href="https://docs.yario.ai/docs/developers/integrations/onboarding" target="_blank" rel="noopener">Открыть legal guide →</a>
+        </li>
+        <li class="journey-card">
+          <span class="step-number">02 · Build</span>
+          <h2>Подключить Integration API</h2>
+          <p>API key остаётся на сервере. Клиент использует stable idempotency keys, bounded retry и installation allowlist.</p>
+          <a href="https://github.com/yario-ai/yario-payment-partner-demo/tree/main/src" target="_blank" rel="noopener">Посмотреть реализацию →</a>
+        </li>
+        <li class="journey-card active">
+          <span class="step-number">03 · Test</span>
+          <h2>Запустить conformance</h2>
+          <p>Проверим профиль, изоляцию, tickets, messages, KYC, повтор запросов и подписи webhook.</p>
+          <button id="run" class="primary">Запустить полную проверку</button>
+          <p id="run-note" class="muted small">Обычно занимает меньше минуты. Одновременно выполняется один безопасный запуск.</p>
+        </li>
+        <li class="journey-card">
+          <span class="step-number">04 · Live gate</span>
+          <h2>Запросить production review</h2>
+          <p>После успешного теста Yario отдельно проверяет договор, оператора, security и разрешённые live-сценарии.</p>
+          <a href="https://docs.yario.ai/docs/developers/integrations" target="_blank" rel="noopener">Условия запуска →</a>
+        </li>
+      </ol>
+
+      <section id="results" class="results card" aria-live="polite">
+        <div class="results-head">
+          <div>
+            <span class="eyebrow">Technical certification</span>
+            <h2 id="result-title">Отчёт ещё не создан</h2>
+            <p id="result-summary" class="muted">Запустите полную проверку на шаге 03.</p>
+          </div>
+          <a id="download" class="secondary" href="/api/report" hidden>Скачать JSON</a>
+        </div>
+        <div id="progress" class="progress" hidden><span></span></div>
+        <div id="checks" class="checks"></div>
+      </section>
+
+      <section class="offer">
+        <div>
+          <span class="eyebrow">Нужна помощь с внедрением?</span>
+          <h2>Интеграция под ключ — от $2,000</h2>
+          <p>Адаптируем этот reference flow под вашу платёжную или сервисную платформу: API client, webhook receiver, тесты и запуск по отдельному договору подряда. Итоговая цена зависит от scope; комиссии провайдеров, юридическая экспертиза и нестандартные доработки оцениваются отдельно.</p>
+        </div>
+        <a class="primary button-link" href="mailto:info@yario.ai?subject=Интеграция%20с%20Yario%20от%20%242000">Обсудить интеграцию</a>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    <span>© Yario · Demo-only reference implementation</span>
+    <a href="https://docs.yario.ai/api-reference/developers/integrations/api-reference" target="_blank" rel="noopener">API Reference</a>
+    <a href="https://github.com/yario-ai/yario-payment-partner-demo/blob/main/SECURITY.md" target="_blank" rel="noopener">Security</a>
+  </footer>
+  <script type="module" src="/assets/app.js"></script>
+</body>
+</html>

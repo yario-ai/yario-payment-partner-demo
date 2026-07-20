@@ -14,7 +14,9 @@ const config = loadConfig({
   YARIO_API_KEY: "yario_test_public.secret",
   YARIO_WEBHOOK_SECRET: "12345678901234567890123456789012",
   YARIO_DEMO_INSTALLATION_IDS: installationId,
-  YARIO_DEMO_CLIENT_IDS: "22222222-2222-4222-8222-222222222222"
+  YARIO_DEMO_CLIENT_IDS: "22222222-2222-4222-8222-222222222222",
+  DEMO_USERNAME: "demo",
+  DEMO_PASSWORD: "public-password"
 });
 
 test("verifies exact bytes and durably deduplicates eventId", async () => {

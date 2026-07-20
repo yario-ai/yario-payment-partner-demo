@@ -1,0 +1,24 @@
+{
+  "name": "@yario/payment-partner-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demo-only reference payment and KYC partner integration for Yario",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "npm run build && npm test",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "conformance": "node dist/conformance-cli.js",
+    "test": "node --test --test-reporter=spec \"dist/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

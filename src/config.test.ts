@@ -1,0 +1,27 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DemoBoundaryError, assertAllowedClient, loadConfig } from "./config.js";
+
+const id = "11111111-1111-4111-8111-111111111111";
+const base = {
+  YARIO_API_BASE_URL: "https://integration-api.yario.ai",
+  YARIO_API_KEY: "yario_test_public.secret",
+  YARIO_WEBHOOK_SECRET: "12345678901234567890123456789012",
+  YARIO_DEMO_INSTALLATION_IDS: id,
+  YARIO_DEMO_CLIENT_IDS: id
+};
+
+test("loads a test-only allowlisted configuration", () => {
+  const config = loadConfig(base);
+  assert.equal(config.allowLive, false);
+  assert.equal(config.allowedInstallationIds.has(id), true);
+});
+
+test("refuses a live key unless explicitly enabled", () => {
+  assert.throws(() => loadConfig({ ...base, YARIO_API_KEY: "yario_live_public.secret" }), /Live credentials are disabled/);
+});
+
+test("fails closed outside the demo client allowlist", () => {
+  const config = loadConfig(base);
+  assert.throws(() => assertAllowedClient(config, "22222222-2222-4222-8222-222222222222"), DemoBoundaryError);
+});

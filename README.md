@@ -3,6 +3,17 @@
 Public, demo-only reference implementation for a payment or regulated partner
 integrating with the [Yario Integration API](https://docs.yario.ai/docs/developers/integrations).
 
+## Try the hosted demo
+
+Open [demo-partner.yario.ai](https://demo-partner.yario.ai) and use the
+demo-only access published in the
+[Integration API Guide](https://docs.yario.ai/docs/developers/integrations).
+The browser never receives an Integration API key: the hosted server calls a
+dedicated synthetic test environment and returns only a redacted report.
+
+The hosted demo serializes access to its shared fixture, rate-limits login and
+test runs, uses an HttpOnly session cookie, and rejects live credentials.
+
 ## Start here
 
 Use the documentation in this order:
@@ -135,6 +146,12 @@ Before adapting this repository:
 - keep the allowlist until your tenant mapping is independently verified;
 - add operational metrics and alerts;
 - complete Yario legal and live-access review.
+
+If you want Yario to adapt this implementation to your platform, we can deliver
+a separately scoped integration project **from USD 2,000**. The final price
+depends on capabilities and provider complexity; provider fees, legal review
+and non-standard product work are excluded unless the statement of work says
+otherwise. Contact [info@yario.ai](mailto:info@yario.ai?subject=Yario%20partner%20integration%20from%20USD%202000).
 
 See the [interactive API reference](https://docs.yario.ai/api-reference/developers/integrations/api-reference)
 for the current HTTP contract, or return to the

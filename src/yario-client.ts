@@ -108,15 +108,15 @@ export class YarioClient {
 
   private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
     let lastError: unknown;
-    for (let attempt = 0; attempt < 6; attempt++) {
+    for (let attempt = 0; attempt < this.config.requestAttempts; attempt++) {
       try {
-        const response = await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(15_000) });
-        if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === 5) return response;
+        const response = await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.config.requestTimeoutMs) });
+        if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === this.config.requestAttempts - 1) return response;
         const retryAfter = Number(response.headers.get("retry-after"));
         await delay(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : backoff(attempt));
       } catch (error) {
         lastError = error;
-        if (attempt === 5) throw error;
+        if (attempt === this.config.requestAttempts - 1) throw error;
         await delay(backoff(attempt));
       }
     }

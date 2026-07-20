@@ -3,6 +3,22 @@
 Public, demo-only reference implementation for a payment or regulated partner
 integrating with the [Yario Integration API](https://docs.yario.ai/docs/developers/integrations).
 
+## Start here
+
+Use the documentation in this order:
+
+1. [Integration API Guide](https://docs.yario.ai/docs/developers/integrations) —
+   the single entry point and complete partner journey.
+2. [Registration and legal/test access](https://docs.yario.ai/docs/developers/integrations/onboarding) —
+   organization profile, agreements and the boundary between test and live.
+3. [Interactive API Reference](https://docs.yario.ai/api-reference/developers/integrations/api-reference) —
+   the normative HTTP, security and webhook contract.
+4. [Testing and certification](https://docs.yario.ai/docs/developers/integrations/testing) —
+   expected checks, reports and remediation.
+
+Technical certification proves the test integration. It does not replace
+Yario legal and operator approval for live access.
+
 It demonstrates:
 
 - API-key authentication and environment discovery;
@@ -55,8 +71,8 @@ curl --fail http://localhost:8080/health
 
 ## Partner flow
 
-1. Open the partner portal URL supplied by Yario and register the demo
-   organization.
+1. Open the [Yario Partner Portal](https://partners.yario.ai/partner/register)
+   and register the demo organization.
 2. Complete the profile and upload synthetic documents only. On explicitly
    configured demo stands, allowlisted partners can self-approve
    `integration.test_access`; this never approves live access.
@@ -121,4 +137,6 @@ Before adapting this repository:
 - complete Yario legal and live-access review.
 
 See the [interactive API reference](https://docs.yario.ai/api-reference/developers/integrations/api-reference)
-for the current HTTP contract.
+for the current HTTP contract, or return to the
+[Integration API Guide](https://docs.yario.ai/docs/developers/integrations)
+for the complete legal, technical and testing flow.

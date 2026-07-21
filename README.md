@@ -27,7 +27,9 @@ Use the documentation in this order:
    organization profile, agreements and the boundary between test and live.
 3. [Interactive API Reference](https://docs.yario.ai/api-reference/developers/integrations/api-reference) —
    the normative HTTP, security and webhook contract.
-4. [Testing and certification](https://docs.yario.ai/docs/developers/integrations/testing) —
+4. [Official Node.js and Python SDKs](https://docs.yario.ai/docs/developers/integrations/sdks) —
+   maintained clients for requests, retries, errors and webhook verification.
+5. [Testing and certification](https://docs.yario.ai/docs/developers/integrations/testing) —
    expected checks, reports and guidance for fixing failures.
 
 Technical certification proves the test integration. It does not replace
@@ -37,7 +39,8 @@ It demonstrates:
 
 - API-key authentication and environment discovery;
 - explicit installation and client allowlists;
-- stable idempotency keys and bounded retry with jitter;
+- the official [`@yario-ai/integration-sdk`](https://github.com/yario-ai/yario-integration-sdks/releases/tag/v0.1.0) client installed from a public, versioned release;
+- stable idempotency keys and bounded retries for transient failures;
 - tickets and messages;
 - synthetic merchant KYC review;
 - webhook HMAC verification over the exact raw body;
@@ -106,13 +109,17 @@ curl --fail http://localhost:8080/health
 Yario Integration API
   | HTTPS + Api-Key + Idempotency-Key
   v
-YarioClient --------> tickets/messages/KYC
+Official Yario SDK -> demo allowlist -> tickets/messages/KYC
 
 Yario webhook
   | exact raw body + HMAC headers
   v
 /webhooks/yario ---> allowlist ---> durable eventId store ---> demo KYC handler
 ```
+
+The API transport and raw-body signature verification come from the official
+Node.js SDK. This repository adds only the demo allowlist, runnable flow,
+conformance report and hosted interface.
 
 The file-based event store is intentionally small and inspectable. A real
 partner should preserve the same unique-event constraint in its transactional

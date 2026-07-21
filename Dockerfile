@@ -12,6 +12,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 USER node
 COPY --chown=node:node --from=build /app/package.json /app/package-lock.json ./
+COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/dist ./dist
 COPY --chown=node:node --from=build /app/public ./public
 EXPOSE 8080

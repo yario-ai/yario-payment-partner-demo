@@ -20,5 +20,8 @@
     "@types/node": "^24.0.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@yario-ai/integration-sdk": "https://github.com/yario-ai/yario-integration-sdks/releases/download/v0.1.0/yario-ai-integration-sdk-0.1.0.tgz"
   }
 }

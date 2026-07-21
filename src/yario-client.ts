@@ -1,86 +1,83 @@
-import { randomUUID } from "node:crypto";
+import { YarioApiError, YarioClient as SdkClient } from "@yario-ai/integration-sdk";
+import type { CreateTicketRequest, UpdateMerchantOnboardingRequest, UpdateTicketRequest } from "@yario-ai/integration-sdk";
 import type { DemoConfig } from "./config.js";
 import { assertAllowedClient, assertAllowedInstallation } from "./config.js";
 import type { IntegrationInstallation, IntegrationProfile, IntegrationTicket, MerchantApplication } from "./types.js";
 
-export class YarioApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly traceId?: string,
-    message = `Yario API returned HTTP ${status}`
-  ) {
-    super(message);
-  }
-}
+export { YarioApiError } from "@yario-ai/integration-sdk";
 
+/**
+ * Demo-policy adapter around the official SDK.
+ *
+ * The SDK owns HTTP authentication, idempotency, retries and API errors. This
+ * adapter adds the demo-only installation/client allowlist and preserves the
+ * small interface used by the runnable conformance flow.
+ */
 export class YarioClient {
-  constructor(private readonly config: DemoConfig, private readonly fetchImpl: typeof fetch = fetch) {}
+  private readonly sdk: SdkClient;
+
+  constructor(private readonly config: DemoConfig, private readonly fetchImpl: typeof fetch = fetch) {
+    this.sdk = new SdkClient({
+      apiKey: config.apiKey,
+      baseUrl: config.apiBaseUrl,
+      attempts: config.requestAttempts,
+      timeoutMs: config.requestTimeoutMs,
+      fetch: fetchImpl,
+    });
+  }
 
   profile(): Promise<IntegrationProfile> {
-    return this.request("/v1/me");
+    return this.sdk.getProfile() as Promise<IntegrationProfile>;
   }
 
   installations(): Promise<IntegrationInstallation[]> {
-    return this.request("/v1/installations");
+    return this.sdk.listInstallations() as Promise<IntegrationInstallation[]>;
   }
 
   resetTestData(): Promise<{ installationId: string; testClientId: string }> {
-    return this.request("/v1/test/reset", { method: "POST" });
+    return this.sdk.resetTestData() as Promise<{ installationId: string; testClientId: string }>;
   }
 
-  createTicket(installationId: string, clientId: string, body: Record<string, unknown>, idempotencyKey: string = randomUUID()): Promise<IntegrationTicket> {
+  createTicket(installationId: string, clientId: string, body: Record<string, unknown>, idempotencyKey?: string): Promise<IntegrationTicket> {
     assertAllowedInstallation(this.config, installationId);
     assertAllowedClient(this.config, clientId);
-    return this.request(`/v1/installations/${installationId}/tickets`, {
-      method: "POST",
-      idempotencyKey,
-      body: { clientId, ...body }
-    });
+    return this.sdk.createTicket(installationId, { clientId, ...body } as CreateTicketRequest, mutationOptions(idempotencyKey)) as Promise<IntegrationTicket>;
   }
 
   getTicket(ticketId: string): Promise<IntegrationTicket> {
-    return this.request(`/v1/tickets/${ticketId}`);
+    return this.sdk.getTicket(ticketId) as Promise<IntegrationTicket>;
   }
 
-  updateTicket(ticketId: string, body: Record<string, unknown>, idempotencyKey: string = randomUUID()): Promise<IntegrationTicket> {
-    return this.request(`/v1/tickets/${ticketId}`, { method: "PATCH", idempotencyKey, body });
+  updateTicket(ticketId: string, body: Record<string, unknown>, idempotencyKey?: string): Promise<IntegrationTicket> {
+    return this.sdk.updateTicket(ticketId, body as UpdateTicketRequest, mutationOptions(idempotencyKey)) as Promise<IntegrationTicket>;
   }
 
-  addMessage(ticketId: string, content: string, idempotencyKey: string = randomUUID()): Promise<Record<string, unknown>> {
-    return this.request(`/v1/tickets/${ticketId}/messages`, {
-      method: "POST",
-      idempotencyKey,
-      body: { content, attachments: [] }
-    });
+  addMessage(ticketId: string, content: string, idempotencyKey?: string): Promise<Record<string, unknown>> {
+    return this.sdk.createMessage(ticketId, { content, attachments: [] }, mutationOptions(idempotencyKey)) as unknown as Promise<Record<string, unknown>>;
   }
 
   messages(ticketId: string): Promise<Record<string, unknown>[]> {
-    return this.request(`/v1/tickets/${ticketId}/messages`);
+    return this.sdk.listMessages(ticketId) as unknown as Promise<Record<string, unknown>[]>;
   }
 
   merchantApplications(installationId: string): Promise<MerchantApplication[]> {
     assertAllowedInstallation(this.config, installationId);
-    return this.request(`/v1/installations/${installationId}/merchant-onboarding/applications`);
+    return this.sdk.listMerchantOnboardingApplications(installationId) as Promise<MerchantApplication[]>;
   }
 
   getMerchantApplication(installationId: string, applicationId: string): Promise<MerchantApplication> {
     assertAllowedInstallation(this.config, installationId);
-    return this.request(`/v1/installations/${installationId}/merchant-onboarding/applications/${applicationId}`);
+    return this.sdk.getMerchantOnboardingApplication(installationId, applicationId) as Promise<MerchantApplication>;
   }
 
-  updateMerchantApplication(
-    installationId: string,
-    applicationId: string,
-    status: string,
-    review: Record<string, unknown>,
-    idempotencyKey: string = randomUUID()
-  ): Promise<MerchantApplication> {
+  updateMerchantApplication(installationId: string, applicationId: string, status: string, review: Record<string, unknown>, idempotencyKey?: string): Promise<MerchantApplication> {
     assertAllowedInstallation(this.config, installationId);
-    return this.request(`/v1/installations/${installationId}/merchant-onboarding/applications/${applicationId}`, {
-      method: "PATCH",
-      idempotencyKey,
-      body: { status, review }
-    });
+    return this.sdk.updateMerchantOnboardingApplication(
+      installationId,
+      applicationId,
+      { status, review } as UpdateMerchantOnboardingRequest,
+      mutationOptions(idempotencyKey),
+    ) as Promise<MerchantApplication>;
   }
 
   async raw(path: string, init: { method?: string; idempotencyKey?: string; body?: unknown } = {}): Promise<Response> {
@@ -90,44 +87,15 @@ export class YarioClient {
         "Api-Key": this.config.apiKey,
         Accept: "application/json",
         ...(init.idempotencyKey ? { "Idempotency-Key": init.idempotencyKey } : {}),
-        ...(init.body === undefined ? {} : { "Content-Type": "application/json" })
-      }
+        ...(init.body === undefined ? {} : { "Content-Type": "application/json" }),
+      },
+      signal: AbortSignal.timeout(this.config.requestTimeoutMs),
     };
     if (init.body !== undefined) request.body = JSON.stringify(init.body);
-    return this.fetchWithRetry(`${this.config.apiBaseUrl}${path}`, request);
-  }
-
-  private async request<T>(path: string, init: { method?: string; idempotencyKey?: string; body?: unknown } = {}): Promise<T> {
-    const response = await this.raw(path, init);
-    if (!response.ok) {
-      const problem = await response.json().catch(() => ({})) as { detail?: string; traceId?: string };
-      throw new YarioApiError(response.status, problem.traceId, problem.detail);
-    }
-    return response.json() as Promise<T>;
-  }
-
-  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt < this.config.requestAttempts; attempt++) {
-      try {
-        const response = await this.fetchImpl(url, { ...init, signal: AbortSignal.timeout(this.config.requestTimeoutMs) });
-        if (![408, 429, 500, 502, 503, 504].includes(response.status) || attempt === this.config.requestAttempts - 1) return response;
-        const retryAfter = Number(response.headers.get("retry-after"));
-        await delay(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1_000 : backoff(attempt));
-      } catch (error) {
-        lastError = error;
-        if (attempt === this.config.requestAttempts - 1) throw error;
-        await delay(backoff(attempt));
-      }
-    }
-    throw lastError;
+    return this.fetchImpl(`${this.config.apiBaseUrl}${path}`, request);
   }
 }
 
-function backoff(attempt: number): number {
-  return Math.min(30_000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
+function mutationOptions(idempotencyKey?: string): { idempotencyKey?: string } {
+  return idempotencyKey ? { idempotencyKey } : {};
 }

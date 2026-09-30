@@ -74,6 +74,21 @@ test("protects the demo, runs once and returns only a redacted public report", a
   const base = `http://127.0.0.1:${address.port}`;
 
   try {
+    const page = await fetch(`${base}/`);
+    assert.equal(page.status, 200);
+    assert.equal(page.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
+    assert.match(await page.text(), /<meta name="robots" content="noindex,nofollow,noarchive">/);
+    const robots = await fetch(`${base}/robots.txt`);
+    assert.equal(robots.status, 200);
+    assert.match(robots.headers.get("content-type") ?? "", /^text\/plain/);
+    const directives = await robots.text();
+    assert.match(directives, /Disallow: \/api\//);
+    assert.doesNotMatch(directives, /Disallow: \/\s*(?:\n|$)/);
+    const privateReport = await fetch(`${base}/api/report`);
+    assert.equal(privateReport.status, 401);
+    assert.equal(privateReport.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
+    const wrongMethod = await fetch(`${base}/robots.txt`, { method: "POST" });
+    assert.equal(wrongMethod.status, 401);
     const anonymous = await fetch(`${base}/api/session`);
     assert.equal(anonymous.status, 401);
     assert.equal(anonymous.headers.get("x-frame-options"), "DENY");

@@ -48,6 +48,13 @@ export function createDemoHandler(deps: DemoAppDependencies) {
       securityHeaders(response);
       const url = new URL(request.url ?? "/", "http://localhost");
 
+      if (request.method === "GET" && url.pathname === "/robots.txt") {
+        // Leave the public page crawlable so crawlers can observe its noindex.
+        const payload = "User-agent: *\nDisallow: /api/\nDisallow: /webhooks/\nDisallow: /health\nDisallow: /assets/\n";
+        response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "content-length": Buffer.byteLength(payload) });
+        response.end(payload);
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/health") {
         return json(response, 200, { status: "ok", demoOnly: true });
       }
@@ -243,6 +250,7 @@ async function asset(response: ServerResponse, path: string, contentType: string
 }
 
 function securityHeaders(response: ServerResponse): void {
+  response.setHeader("x-robots-tag", "noindex, nofollow, noarchive");
   response.setHeader("content-security-policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   response.setHeader("referrer-policy", "no-referrer");
   response.setHeader("x-content-type-options", "nosniff");

@@ -267,7 +267,7 @@ jobs:
                'source_sha':os.environ['APP_SOURCE_SHA'],'repository':os.environ['GITHUB_REPOSITORY'],
                'caller_context_workflow_sha':os.environ['GITHUB_WORKFLOW_SHA'],'test_invocations':0,'build':'NOT_RUN','cleanup':'NOT_RUN',
                'owning_workflow_path':'.github/workflows/ci.yml' if os.environ['GITHUB_REPOSITORY']=='yario-ai/yario-payment-partner-demo' else '.github/workflows/preflight-existing-demo-build.yml',
-               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'6db626b5550e7ad03e568ebc3d27a751b78e7f8231163a8f0f1308e1d5bac40b',
+               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'79d4ba74aa5a208f752e93031d5dfebb1d7344e52b475c8a3d02d479437d6588',
                'trusted_reusable_sha':os.environ['TRUSTED_REUSABLE_SHA'] or None}
         with open(os.environ['GITHUB_EVENT_PATH'],encoding='utf-8') as stream: event=json.load(stream)
         state['run_head_sha']=event['pull_request']['head']['sha'] if os.environ['GITHUB_EVENT_NAME']=='pull_request' else os.environ['GITHUB_SHA']
@@ -341,7 +341,8 @@ jobs:
             with opener.open(BUILDX_URL, timeout=8) as response, binary.open('xb') as output:
                 while True:
                     require(time.monotonic() < deadline)
-                    chunk = response.read(65536)
+                    chunk = response.read1(65536)
+                    require(time.monotonic() < deadline)
                     if not chunk:
                         break
                     size += len(chunk)
@@ -713,7 +714,7 @@ jobs:
         assert root.resolve()==root and root.is_dir() and root.stat().st_uid==1000
         helper=root/'orchestrator.py'
         assert stat.S_ISREG(helper.lstat().st_mode) and helper.stat().st_uid==1000
-        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='6db626b5550e7ad03e568ebc3d27a751b78e7f8231163a8f0f1308e1d5bac40b'
+        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='79d4ba74aa5a208f752e93031d5dfebb1d7344e52b475c8a3d02d479437d6588'
         subprocess.run(['python3',str(helper),'--cleanup'],check=True)
         state=json.loads((root/'state.json').read_text())
         assert state['cleanup']=='PASS'

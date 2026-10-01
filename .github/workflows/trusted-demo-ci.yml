@@ -267,7 +267,7 @@ jobs:
                'source_sha':os.environ['APP_SOURCE_SHA'],'repository':os.environ['GITHUB_REPOSITORY'],
                'caller_context_workflow_sha':os.environ['GITHUB_WORKFLOW_SHA'],'test_invocations':0,'build':'NOT_RUN','cleanup':'NOT_RUN',
                'owning_workflow_path':'.github/workflows/ci.yml' if os.environ['GITHUB_REPOSITORY']=='yario-ai/yario-payment-partner-demo' else '.github/workflows/preflight-existing-demo-build.yml',
-               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'a174388b773c99d92cce2e362346dd072400c1e4f7158a50b466576c914ae1dd',
+               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'faf565085f80af2f5b68701035eee441df0b4dee961352028d10b8adf0feee70',
                'trusted_reusable_sha':os.environ['TRUSTED_REUSABLE_SHA'] or None}
         with open(os.environ['GITHUB_EVENT_PATH'],encoding='utf-8') as stream: event=json.load(stream)
         state['run_head_sha']=event['pull_request']['head']['sha'] if os.environ['GITHUB_EVENT_NAME']=='pull_request' else os.environ['GITHUB_SHA']
@@ -594,8 +594,9 @@ jobs:
             docker('buildx','create','--name',builder,'--driver','docker-container','--driver-opt',
                    'image='+BUILDKIT+',memory=1g,cpu-period=100000,cpu-quota=100000,env.SEO1967_OWNER='+state['nonce'],
                    'unix:///var/run/docker.sock')
-            endpoint=docker('buildx','inspect',builder,'--format','{{range .Nodes}}{{.Endpoint}}{{end}}')
-            require(endpoint=='unix:///var/run/docker.sock')
+            # Both the Docker host flag and the created builder endpoint are explicit;
+            # its config is exclusively owned and never mounted into application tests.
+            state['builder_endpoint_argument']='unix:///var/run/docker.sock'; save_state(root,state)
             docker('buildx','inspect',builder,'--bootstrap',timeout=90)
             require(builder_id(builder,state['nonce']) is not None and volume_owned(volume,state['nonce']))
             state['image_intent']=True; save_state(root,state)
@@ -664,7 +665,7 @@ jobs:
         assert root.resolve()==root and root.is_dir() and root.stat().st_uid==1000
         helper=root/'orchestrator.py'
         assert stat.S_ISREG(helper.lstat().st_mode) and helper.stat().st_uid==1000
-        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='a174388b773c99d92cce2e362346dd072400c1e4f7158a50b466576c914ae1dd'
+        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='faf565085f80af2f5b68701035eee441df0b4dee961352028d10b8adf0feee70'
         subprocess.run(['python3',str(helper),'--cleanup'],check=True)
         state=json.loads((root/'state.json').read_text())
         assert state['cleanup']=='PASS'

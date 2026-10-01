@@ -10,13 +10,4 @@ permissions:
 
 jobs:
   verify:
-    runs-on: [self-hosted, yario]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: docker build -t yario-payment-partner-demo:test .
+    uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@c6d4c5c2eca2117ec9254f7cbffc5d5eadb8287b

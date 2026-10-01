@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "fix/**"]
   pull_request:
 
 permissions:
@@ -10,13 +10,4 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - run: docker build -t yario-payment-partner-demo:test .
+    uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@bfa17591ce685d67c88fe2bd99849de246904db9

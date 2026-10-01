@@ -1,0 +1,725 @@
+name: Trusted demo CI TASK-1967
+'on':
+  workflow_call: {}
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: ${{ github.repository == 'yario-ai/yario-payment-partner-demo' && (github.event_name == 'push' || (github.event_name
+      == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.head.repo.fork))
+      }}
+    runs-on:
+      group: Yario demo reviewed TASK-1967
+      labels:
+      - self-hosted
+      - yario-light
+      - yario-ci-runner-6
+    timeout-minutes: 15
+    steps:
+    - name: Require trusted caller, application tree and existing host
+      id: guard
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python3 - <<'PY'
+        import hashlib
+        import copy
+        import json
+        import os
+        import pathlib
+        import re
+        import subprocess
+        import urllib.request
+
+        PREFLIGHT = False
+        PREFLIGHT_SOURCE = None
+        REPOSITORY = 'yario-ai/yario-payment-partner-demo'
+        TASK_REF = 'refs/heads/fix/1967-redfox-jev-seo'
+        APP_FINGERPRINT = '4218f6fdd88a1e10c584e0668707570930dc6ac87fde5b6c0c7ac1b7b976328a'
+        WORKFLOWS = {'.github/workflows/ci.yml', '.github/workflows/trusted-demo-ci.yml'}
+
+        def require(condition):
+            if not condition:
+                raise ValueError('admission rejected')
+
+        def event_source(repository, event_name, ref, sha, event):
+            require(repository == REPOSITORY)
+            if event_name == 'push':
+                require(ref in ('refs/heads/main', TASK_REF) and event.get('ref') == ref)
+                require(event.get('after') == sha and not event.get('deleted'))
+                source = sha
+            elif event_name == 'pull_request':
+                require(event.get('number') == 8 and ref == 'refs/pull/8/merge')
+                require(event.get('action') in ('opened', 'synchronize', 'reopened'))
+                pr = event['pull_request']
+                require(pr['head']['repo']['full_name'] == REPOSITORY and pr['head']['repo']['fork'] is False)
+                require(pr['base']['repo']['full_name'] == REPOSITORY and pr['base']['ref'] == 'main')
+                require('refs/heads/' + pr['head']['ref'] == TASK_REF)
+                require(re.fullmatch('[0-9a-f]{40}', pr['head']['sha']))
+                source = sha  # GitHub's actual synthetic merge, not only the PR head.
+            else:
+                raise ValueError('event rejected')
+            require(isinstance(source, str) and re.fullmatch('[0-9a-f]{40}', source))
+            return source
+
+        def fingerprint(tree):
+            require(tree.get('truncated') is False and len(tree['tree']) <= 200)
+            rows = []
+            workflow_bytes = 0
+            for item in tree['tree']:
+                path = item['path']
+                require(isinstance(path, str) and len(path) <= 300 and not any(c in path for c in '\n\r\0\\'))
+                require(not any(p in ('', '.', '..') for p in path.split('/')))
+                if item['type'] == 'tree':
+                    require(item['mode'] == '040000')
+                    continue
+                require(item['type'] == 'blob' and re.fullmatch('[0-9a-f]{40}', item['sha']))
+                if path.startswith('.github/workflows/'):
+                    require(path in WORKFLOWS and item['mode'] == '100644' and item['size'] <= 65536)
+                    workflow_bytes += item['size']
+                    require(workflow_bytes <= 131072)
+                    continue
+                require(item['mode'] in ('100644', '100755'))
+                rows.append((path, item['mode'], item['sha']))
+            require(len(rows) == len({r[0] for r in rows}))
+            return hashlib.sha256(''.join(mode+'\0'+path+'\0'+sha+'\n' for path,mode,sha in sorted(rows)).encode()).hexdigest()
+
+        def api(path):
+            require(path.startswith('/repos/' + REPOSITORY + '/git/trees/'))
+            request = urllib.request.Request('https://api.github.com' + path,
+                headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'], 'Accept':'application/vnd.github+json',
+                         'Cache-Control':'no-cache', 'Pragma':'no-cache'})
+            with urllib.request.urlopen(request, timeout=15) as response:
+                body = response.read(1_000_001)
+            require(len(body) <= 1_000_000)
+            return json.loads(body)
+
+        def self_test(tree):
+            sha = 'a'*40
+            event = {'ref':TASK_REF,'after':sha,'deleted':False}
+            require(event_source(REPOSITORY,'push',TASK_REF,sha,event) == sha)
+            main_event = dict(event,ref='refs/heads/main')
+            require(event_source(REPOSITORY,'push','refs/heads/main',sha,main_event) == sha)
+            pr = {'number':8,'action':'synchronize','pull_request':{
+                'head':{'sha':sha,'ref':TASK_REF.removeprefix('refs/heads/'),'repo':{'full_name':REPOSITORY,'fork':False}},
+                'base':{'ref':'main','repo':{'full_name':REPOSITORY}}}}
+            require(event_source(REPOSITORY,'pull_request','refs/pull/8/merge','b'*40,pr) == 'b'*40)
+            cases = [('other/repository','push',TASK_REF,sha,event),
+                     (REPOSITORY,'workflow_dispatch',TASK_REF,sha,event),
+                     (REPOSITORY,'push','refs/heads/other',sha,event),
+                     (REPOSITORY,'push',TASK_REF,'b'*40,event),
+                     (REPOSITORY,'push',TASK_REF,sha,dict(event,deleted=True)),
+                     (REPOSITORY,'push',TASK_REF,'invalid',dict(event,after='invalid'))]
+            for target,value in [('fork',True),('full_name','other/fork')]:
+                bad = copy.deepcopy(pr)
+                bad['pull_request']['head']['repo'][target] = value
+                cases.append((REPOSITORY,'pull_request','refs/pull/8/merge','b'*40,bad))
+            for target,value in [('number',9),('action','closed')]:
+                bad = copy.deepcopy(pr); bad[target] = value
+                cases.append((REPOSITORY,'pull_request','refs/pull/8/merge','b'*40,bad))
+            bad = copy.deepcopy(pr); bad['pull_request']['base']['ref'] = 'dev'
+            cases.append((REPOSITORY,'pull_request','refs/pull/8/merge','b'*40,bad))
+            for args in cases:
+                try:
+                    event_source(*args)
+                except (ValueError, KeyError, TypeError):
+                    continue
+                raise ValueError('negative event fixture accepted')
+            require(fingerprint(tree) == APP_FINGERPRINT)
+            for path in ['Dockerfile','package.json','package-lock.json','src/demo-app.test.ts']:
+                bad = copy.deepcopy(tree)
+                matches = [item for item in bad['tree'] if item['path'] == path]
+                require(len(matches) == 1)
+                matches[0]['sha'] = '0'*40
+                require(fingerprint(bad) != APP_FINGERPRINT)
+            bad_trees = []
+            bad = copy.deepcopy(tree); bad['truncated'] = True; bad_trees.append(bad)
+            for path,mode,size,kind in [('.github/workflows/unapproved.yml','100644',1,'blob'),
+                                        ('.github/workflows/ci.yml','120000',1,'blob'),
+                                        ('.github/workflows/ci.yml','100644',65537,'blob'),
+                                        ('unapproved-submodule','160000',1,'commit')]:
+                bad = copy.deepcopy(tree)
+                bad['tree'] = [x for x in bad['tree'] if x['path'] != path]
+                bad['tree'].append({'path':path,'mode':mode,'size':size,'type':kind,'sha':'c'*40})
+                bad_trees.append(bad)
+            for bad in bad_trees:
+                try:
+                    fingerprint(bad)
+                except (ValueError, KeyError, TypeError):
+                    continue
+                raise ValueError('negative tree fixture accepted')
+            print('Trusted event/source negative fixtures passed')
+
+        def native_reusable(run,event_name,run_id,attempt,head):
+            require(run['id']==int(run_id) and run['run_attempt']==int(attempt) and run['repository']['full_name']==REPOSITORY
+                    and run['path']=='.github/workflows/ci.yml' and run['event']==event_name and run['head_sha']==head)
+            refs=run['referenced_workflows']
+            require(len(refs)==1)
+            ref=refs[0]; sha=ref['sha']
+            require(re.fullmatch('[0-9a-f]{40}',sha) and ref.get('ref') in (None,sha)
+                    and ref['path']==REPOSITORY+'/.github/workflows/trusted-demo-ci.yml@'+sha)
+            return sha
+
+        def native_public_run(run_id,attempt):
+            require(re.fullmatch('[0-9]+',run_id) and re.fullmatch('[0-9]+',attempt))
+            url='https://api.github.com/repos/'+REPOSITORY+'/actions/runs/'+run_id+'/attempts/'+attempt
+            request=urllib.request.Request(url,headers={'Accept':'application/vnd.github+json','Cache-Control':'no-cache','Pragma':'no-cache'})
+            with urllib.request.urlopen(request,timeout=15) as response:
+                require(response.status==200 and response.url==url)
+                data=response.read(1_000_001)
+            require(len(data)<=1_000_000)
+            return json.loads(data)
+
+        def host_gate():
+            require(os.environ['RUNNER_NAME'] == 'yario-ci-runner-6' and os.geteuid() == 1000)
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open('http://169.254.169.254/hetzner/v1/metadata/instance-id', timeout=3) as response:
+                metadata = response.read(65)
+            require(len(metadata) <= 64 and metadata.decode('ascii').strip() == '119999215')
+            with open('/proc/meminfo', encoding='ascii') as stream:
+                memory = stream.read(16385)
+            require(len(memory) <= 16384)
+            available = re.search(r'^MemAvailable:\s+(\d+) kB$', memory, re.M)
+            require(available and int(available.group(1))*1024 >= 2_000_000_000)
+            fs = os.statvfs(os.environ['GITHUB_WORKSPACE'])
+            require(fs.f_bavail*fs.f_frsize >= 12_000_000_000 and fs.f_favail >= 100000)
+            require(subprocess.run(['systemctl','is-active','--quiet','tinyproxy'], stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=3).returncode == 0)
+            for relative in ['.ssh', '.kube/config', '.docker/config.json', '.git-credentials',
+                             '.config/gh/hosts.yml', '.npmrc', '.aws/credentials']:
+                path = pathlib.Path.home() / relative
+                try:
+                    path.lstat()
+                except FileNotFoundError:
+                    parent = path.parent
+                    for _ in range(10):
+                        try:
+                            parent.stat()
+                            require(os.access(parent, os.R_OK | os.X_OK))
+                            break
+                        except FileNotFoundError:
+                            parent = parent.parent
+                    else:
+                        raise ValueError('unknown credential metadata')
+                else:
+                    raise ValueError('credential boundary changed')
+
+        def main():
+            reusable=None
+            if PREFLIGHT:
+                require(os.environ['GITHUB_REPOSITORY'] == 'yario-ai/yario-cloud-infra')
+                require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' and os.environ['GITHUB_REF'] == 'refs/heads/main')
+                require(re.fullmatch('[0-9a-f]{40}', os.environ['EXPECTED_INFRA_SHA']))
+                require(os.environ['GITHUB_SHA'] == os.environ['EXPECTED_INFRA_SHA'])
+                require(isinstance(PREFLIGHT_SOURCE,str) and re.fullmatch('[0-9a-f]{40}',PREFLIGHT_SOURCE))
+                source = PREFLIGHT_SOURCE
+            else:
+                with open(os.environ['GITHUB_EVENT_PATH'], 'rb') as stream:
+                    body = stream.read(1_000_001)
+                require(len(body) <= 1_000_000)
+                source = event_source(os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_EVENT_NAME'],
+                                      os.environ['GITHUB_REF'], os.environ['GITHUB_SHA'], json.loads(body))
+                event=json.loads(body)
+                head=event['pull_request']['head']['sha'] if os.environ['GITHUB_EVENT_NAME']=='pull_request' else source
+                run_id,attempt=os.environ['GITHUB_RUN_ID'],os.environ['GITHUB_RUN_ATTEMPT']
+                reusable=native_reusable(native_public_run(run_id,attempt),os.environ['GITHUB_EVENT_NAME'],run_id,attempt,head)
+            tree = api('/repos/'+REPOSITORY+'/git/trees/'+source+'?recursive=1')
+            require(fingerprint(tree) == APP_FINGERPRINT)
+            self_test(tree)
+            host_gate()
+            with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+                output.write('source_sha='+source+'\n')
+                output.write('trusted_reusable_sha='+(reusable or '')+'\n')
+            print('Trusted source and existing runner admission guard passed')
+
+        if __name__ == '__main__':
+            try:
+                main()
+            except Exception:
+                raise SystemExit('Trusted source/host guard rejected; no application checkout or execution')
+        PY
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: yario-ai/yario-payment-partner-demo
+        ref: ${{ steps.guard.outputs.source_sha }}
+        persist-credentials: false
+    - name: Check approved demo in bounded Node22 container and Docker builder
+      id: build
+      env:
+        APP_SOURCE_SHA: ${{ steps.guard.outputs.source_sha }}
+        TRUSTED_REUSABLE_SHA: ${{ steps.guard.outputs.trusted_reusable_sha }}
+      run: |
+        set -euo pipefail
+        umask 077
+        python3 - <<'PY'
+        import json,os,pathlib,re,uuid
+        run,attempt=os.environ['GITHUB_RUN_ID'],os.environ['GITHUB_RUN_ATTEMPT']
+        assert re.fullmatch('[0-9]+',run) and re.fullmatch('[0-9]+',attempt)
+        assert os.environ['RUNNER_NAME']=='yario-ci-runner-6' and os.geteuid()==1000
+        assert re.fullmatch('[0-9a-f]{40}',os.environ['APP_SOURCE_SHA'])
+        temp=pathlib.Path(os.environ['RUNNER_TEMP'])
+        assert temp.is_absolute() and temp.resolve()==temp and temp.is_dir()
+        root=temp/f'seo1967-{run}-{attempt}'
+        root.mkdir(mode=0o700)
+        (root/'evidence').mkdir(mode=0o700)
+        (root/'docker-config').mkdir(mode=0o700)
+        state={'schema_version':1,'run_id':run,'attempt':attempt,'nonce':uuid.uuid4().hex,
+               'source_sha':os.environ['APP_SOURCE_SHA'],'repository':os.environ['GITHUB_REPOSITORY'],
+               'caller_context_workflow_sha':os.environ['GITHUB_WORKFLOW_SHA'],'test_invocations':0,'build':'NOT_RUN','cleanup':'NOT_RUN',
+               'owning_workflow_path':'.github/workflows/ci.yml' if os.environ['GITHUB_REPOSITORY']=='yario-ai/yario-payment-partner-demo' else '.github/workflows/preflight-existing-demo-build.yml',
+               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'79d4ba74aa5a208f752e93031d5dfebb1d7344e52b475c8a3d02d479437d6588',
+               'trusted_reusable_sha':os.environ['TRUSTED_REUSABLE_SHA'] or None}
+        with open(os.environ['GITHUB_EVENT_PATH'],encoding='utf-8') as stream: event=json.load(stream)
+        state['run_head_sha']=event['pull_request']['head']['sha'] if os.environ['GITHUB_EVENT_NAME']=='pull_request' else os.environ['GITHUB_SHA']
+        assert re.fullmatch('[0-9a-f]{40}',state['run_head_sha'])
+        with (root/'state.json').open('x',encoding='utf-8') as stream: json.dump(state,stream,indent=2)
+        (root/'state.json').chmod(0o600)
+        PY
+        root="${RUNNER_TEMP}/seo1967-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        set -o noclobber
+        cat > "$root/orchestrator.py" <<'YARIO_CODE'
+        """Immutable trusted host orchestration; never accepts arbitrary fork code."""
+        import argparse
+        import hashlib
+        import io
+        import json
+        import os
+        import pathlib
+        import queue
+        import re
+        import shutil
+        import signal
+        import stat
+        import subprocess
+        import tarfile
+        import threading
+        import time
+        import uuid
+        import urllib.parse
+        import urllib.request
+        import xml.etree.ElementTree as ET
+
+        NODE = 'node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402'
+        BUILDKIT = 'moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea'
+        BUILDX_URL = 'https://github.com/docker/buildx/releases/download/v0.30.1/buildx-v0.30.1.linux-amd64'
+        BUILDX_SHA256 = 'c37114fcd034025ec68e224657c8a5a850df472ded3ddcbca75ad3a7ebb9710d'
+        BUILDX_SIZE = 71069880
+        OVERRIDES = ['DOCKER_HOST','DOCKER_CONTEXT','DOCKER_CONFIG','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','BUILDX_BUILDER','BUILDX_CONFIG','BUILDKIT_HOST']
+        CASES = {'loads a test-only allowlisted configuration', 'requires an explicit opt-in before resetting test fixtures',
+                 'refuses a live key unless explicitly enabled', 'fails closed outside the demo client allowlist',
+                 'rejects invalid session and cooldown configuration', 'protects the demo, runs once and returns only a redacted public report',
+                 'serializes access to the shared synthetic fixture', 'verifies exact bytes and durably deduplicates eventId',
+                 'rejects an invalid signature before parsing a business event'}
+
+        def require(value):
+            if not value:
+                raise ValueError('trusted orchestration rejected')
+
+
+        class OfficialBuildxRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                target = urllib.parse.urlparse(newurl)
+                require(target.scheme == 'https' and target.hostname in
+                        {'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
+                        and target.username is None and target.password is None
+                        and target.port in (None, 443))
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+        def prepare_buildx(root):
+            # This public vendor binary lives only in the owned job config, never on PATH.
+            config = root / 'docker-config'
+            root_metadata(config)
+            plugins = config / 'cli-plugins'
+            plugins.mkdir(mode=0o700)
+            binary = plugins / 'docker-buildx'
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), OfficialBuildxRedirect())
+            digest = hashlib.sha256()
+            size = 0
+            deadline = time.monotonic() + 90
+            prefix = b''
+            with opener.open(BUILDX_URL, timeout=8) as response, binary.open('xb') as output:
+                while True:
+                    require(time.monotonic() < deadline)
+                    chunk = response.read1(65536)
+                    require(time.monotonic() < deadline)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    require(size <= BUILDX_SIZE <= 96 * 1024 * 1024)
+                    if len(prefix) < 4:
+                        prefix = (prefix + chunk)[:4]
+                    digest.update(chunk)
+                    output.write(chunk)
+            require(size == BUILDX_SIZE and digest.hexdigest() == BUILDX_SHA256 and prefix == b'\x7fELF')
+            binary.chmod(0o700)
+            return digest.hexdigest()
+
+        def coordinates():
+            run, attempt = os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT']
+            require(re.fullmatch('[0-9]+',run) and re.fullmatch('[0-9]+',attempt))
+            require(os.environ['RUNNER_NAME']=='yario-ci-runner-6' and os.geteuid()==1000)
+            temp=pathlib.Path(os.environ['RUNNER_TEMP'])
+            require(temp.is_absolute() and temp.resolve()==temp and temp.is_dir())
+            return temp/f'seo1967-{run}-{attempt}',run,attempt
+
+        def root_metadata(root):
+            info=root.lstat()
+            require(stat.S_ISDIR(info.st_mode) and info.st_uid==1000 and stat.S_IMODE(info.st_mode)==0o700)
+
+        def read_state(root):
+            root_metadata(root)
+            path=root/'state.json'
+            info=path.lstat()
+            require(stat.S_ISREG(info.st_mode) and info.st_uid==1000 and info.st_size<=8192)
+            descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+            with os.fdopen(descriptor,'r',encoding='utf-8') as stream:
+                state=json.load(stream)
+            _,run,attempt=coordinates()
+            require(state['run_id']==run and state['attempt']==attempt and re.fullmatch('[0-9a-f]{32}',state['nonce']))
+            require(state['source_sha']==os.environ['APP_SOURCE_SHA'])
+            return state
+
+        def save_state(root,state):
+            data=json.dumps(state,indent=2)+'\n'
+            require(len(data.encode())<=8192)
+            stable=root.parent.parent/'_seo1967_state'
+            if not stable.exists():
+                stable.mkdir(mode=0o700)
+            root_metadata(stable)
+            record=stable/(state['run_id']+'-'+state['attempt']+'.json')
+            if record.exists():
+                previous=read_json_owned(record)
+                require(previous['nonce']==state['nonce'] and previous['source_sha']==state['source_sha']
+                        and previous['run_head_sha']==state['run_head_sha'] and previous['repository']==state['repository'])
+            atomic_state(record,data)
+            atomic_state(root/'state.json',data)
+
+        def read_json_owned(path):
+            info=path.lstat()
+            require(stat.S_ISREG(info.st_mode) and info.st_uid==1000 and stat.S_IMODE(info.st_mode)==0o600 and info.st_size<=8192)
+            descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+            with os.fdopen(descriptor,'r',encoding='utf-8') as stream:
+                return json.load(stream)
+
+        def atomic_state(destination,data):
+            path=destination.with_suffix('.next')
+            if path.exists():
+                # A killed writer can leave only this bounded, exact owned metadata temp.
+                info=path.lstat()
+                require(stat.S_ISREG(info.st_mode) and info.st_uid==1000 and stat.S_IMODE(info.st_mode)==0o600 and info.st_size<=8192)
+                path.unlink()
+            descriptor=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            with os.fdopen(descriptor,'w',encoding='utf-8') as stream:
+                stream.write(data)
+                stream.flush(); os.fsync(stream.fileno())
+            path.replace(destination)
+            descriptor=os.open(destination.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+
+        def invoke(argv,timeout=30):
+            process=subprocess.Popen(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                                     env=PROCESS_ENV,start_new_session=os.name=='posix')
+            messages=queue.Queue(maxsize=4); stop=threading.Event()
+            def reader(stream,primary):
+                try:
+                    while not stop.is_set():
+                        data=stream.read(1024)
+                        while not stop.is_set():
+                            try:
+                                messages.put((primary,data),timeout=.05); break
+                            except queue.Full:
+                                pass
+                        if not data: break
+                finally:
+                    stream.close()
+            threads=[threading.Thread(target=reader,args=(stream,primary),daemon=True)
+                     for stream,primary in [(process.stdout,True),(process.stderr,False)]]
+            for thread in threads: thread.start()
+            deadline=time.monotonic()+timeout; output=bytearray(); log=bytearray(); finished=0; failed=False
+            try:
+                while finished<2:
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0: failed=True; break
+                    try: primary,data=messages.get(timeout=min(remaining,.1))
+                    except queue.Empty: continue
+                    if not data: finished+=1; continue
+                    if len(log)+len(data)>262144: failed=True; break
+                    log.extend(data)
+                    if primary: output.extend(data)
+                if not failed: process.wait(timeout=max(.001,deadline-time.monotonic()))
+            except subprocess.TimeoutExpired:
+                failed=True
+            finally:
+                stop.set()
+                if failed:
+                    try:
+                        if os.name=='posix': os.killpg(process.pid,signal.SIGKILL)
+                        else: process.kill()
+                    except ProcessLookupError: pass
+                process.wait(timeout=2)
+                for thread in threads: thread.join(timeout=1)
+            if ROOT is not None and log:
+                path=ROOT/'evidence/commands.log'
+                size=path.stat().st_size if path.exists() else 0
+                with path.open('ab') as stream: stream.write(log[:max(0,262144-size)])
+            require(not failed and process.returncode==0)
+            return output.decode('utf-8').strip()
+
+        def docker(*args,timeout=30):
+            return invoke([DOCKER,'--host','unix:///var/run/docker.sock','--config',str(ROOT/'docker-config'),*args],timeout)
+
+        def names(state):
+            suffix=state['run_id']+'-'+state['attempt']
+            return 'seo1967-test-'+suffix,'seo1967-build-'+suffix,'seo1967-demo:'+suffix
+
+        def node_id(name,nonce):
+            rows=docker('container','ls','-aq','--filter','name=^/'+name+'$').splitlines()
+            if not rows:
+                return None
+            require(len(rows)==1)
+            value=docker('container','inspect','--format','{{.Id}}|{{index .Config.Labels "yario.seo1967.owner"}}',name)
+            ident,owner=value.split('|')
+            require(re.fullmatch('[0-9a-f]{64}',ident) and owner==nonce)
+            return ident
+
+        def image_id(name,nonce):
+            rows=docker('image','ls','-q','--filter','reference='+name).splitlines()
+            if not rows:
+                return None
+            value=docker('image','inspect','--format','{{.Id}}|{{index .Config.Labels "yario.seo1967.owner"}}',name)
+            ident,owner=value.split('|')
+            require(re.fullmatch('sha256:[0-9a-f]{64}',ident) and owner==nonce)
+            return ident
+
+        def builder_id(name,nonce):
+            cname='buildx_buildkit_'+name+'0'
+            rows=docker('container','ls','-aq','--filter','name=^/'+cname+'$').splitlines()
+            if not rows:
+                return None
+            require(len(rows)==1)
+            template='{{.Id}}|{{range .Config.Env}}{{if eq . "SEO1967_OWNER='+nonce+'"}}owned{{end}}{{end}}'
+            ident,owner=docker('container','inspect','--format',template,cname).split('|')
+            require(re.fullmatch('[0-9a-f]{64}',ident) and owner=='owned')
+            return ident
+
+        def volume_owned(name,nonce):
+            rows=docker('volume','ls','-q','--filter','name=^'+name+'$').splitlines()
+            if not rows:
+                return False
+            require(rows==[name])
+            require(docker('volume','inspect','--format','{{index .Labels "yario.seo1967.owner"}}',name)==nonce)
+            return True
+
+        def cleanup(root,state):
+            container,builder,image=names(state)
+            volume='buildx_buildkit_'+builder+'0_state'
+            failures=[]
+            def attempt(label,operation):
+                try:
+                    operation()
+                except Exception:
+                    failures.append(label)
+            def remove_node():
+                ident=node_id(container,state['nonce'])
+                if ident:
+                    docker('container','rm','-f',ident)
+            def remove_image():
+                ident=image_id(image,state['nonce'])
+                if ident:
+                    docker('image','rm',image)
+            def remove_builder():
+                ident=builder_id(builder,state['nonce'])
+                if ident:
+                    # The privileged service belongs only to trusted fixed orchestration.
+                    docker('container','rm','-f',ident)
+                # Config is confined to this exclusive job directory, not host defaults.
+                instance=root/'docker-config/buildx/instances'/builder
+                if instance.exists():
+                    docker('buildx','rm','--force','--keep-state',builder)
+            def remove_volume():
+                if volume_owned(volume,state['nonce']):
+                    docker('volume','rm',volume)
+            attempt('test-container',remove_node)
+            attempt('image',remove_image)
+            if state.get('builder_intent'):
+                attempt('builder',remove_builder)
+                attempt('builder-volume',remove_volume)
+            attempt('test-container-absent',lambda:require(node_id(container,state['nonce']) is None))
+            attempt('image-absent',lambda:require(image_id(image,state['nonce']) is None))
+            attempt('builder-absent',lambda:require(builder_id(builder,state['nonce']) is None))
+            attempt('volume-absent',lambda:require(not volume_owned(volume,state['nonce'])))
+            attempt('tinyproxy',lambda:invoke(['systemctl','is-active','--quiet','tinyproxy']))
+            # No broad temp prune; fd-safe removal is confined to owned scratch children.
+            for child in ['test-context','build-context'] + ([] if failures else ['docker-config']):
+                path=root/child
+                if path.exists():
+                    attempt(child,lambda path=path:(require(shutil.rmtree.avoids_symlink_attacks),shutil.rmtree(path)))
+            state['cleanup']='FAILED' if failures else 'PASS'
+            state['cleanup_failures']=failures
+            save_state(root,state)
+            require(not failures)
+
+        def contexts(root):
+            payload=subprocess.run(['git','archive','--format=tar','HEAD','--','Dockerfile','package.json','package-lock.json','tsconfig.json','src','public'],
+                                   stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=15,check=True).stdout
+            require(len(payload)<=4_000_000)
+            for name in ['test-context','build-context']:
+                destination=root/name
+                destination.mkdir(mode=0o700)
+                with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
+                    members=archive.getmembers()
+                    require(len(members)<=200)
+                    for item in members:
+                        parts=pathlib.PurePosixPath(item.name).parts
+                        require(parts and not any(p in ('.','..','.git') for p in parts) and not item.name.startswith('/'))
+                        require(parts[0] in ('Dockerfile','package.json','package-lock.json','tsconfig.json','src','public'))
+                        target=destination.joinpath(*parts)
+                        if item.isdir():
+                            target.mkdir(mode=0o700,parents=True,exist_ok=True)
+                        else:
+                            require(item.isfile() and item.size<=1_000_000)
+                            target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+                            with archive.extractfile(item) as source, target.open('xb') as output:
+                                shutil.copyfileobj(source,output)
+                            target.chmod(0o644)
+            return hashlib.sha256(payload).hexdigest()
+
+        def case_report(path):
+            info=path.lstat()
+            require(stat.S_ISREG(info.st_mode) and info.st_size<=65536)
+            descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+            with os.fdopen(descriptor,'rb') as stream:
+                data=stream.read(65537)
+            require(len(data)<=65536 and b'<!DOCTYPE' not in data.upper())
+            cases=ET.fromstring(data).findall('.//testcase')
+            require(len(cases)==len(CASES) and {x.get('name') for x in cases}==CASES)
+            require(all(not list(x.iter('failure')) and not list(x.iter('error')) and not list(x.iter('skipped')) for x in cases))
+            return data
+
+        def build(root,state):
+            require(not any(name in os.environ for name in OVERRIDES))
+            require(re.fullmatch('[0-9a-f]{40}',state['source_sha']))
+            require(invoke(['git','rev-parse','HEAD'])==state['source_sha'])
+            require(invoke(['git','status','--porcelain'])=='')
+            auth=subprocess.run(['git','config','--local','--get-regexp','^http\\..*extraheader$'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            require(auth.returncode==1)
+            state['archive_sha256']=contexts(root)
+            state['phase']='node22-checks'
+            save_state(root,state)
+            container,builder,image=names(state)
+            volume='buildx_buildkit_'+builder+'0_state'
+            require(not docker('container','ls','-aq','--filter','name=^/'+container+'$'))
+            require(not docker('container','ls','-aq','--filter','name=^/buildx_buildkit_'+builder+'0$'))
+            require(not docker('image','ls','-q','--filter','reference='+image))
+            require(not docker('volume','ls','-q','--filter','name=^'+volume+'$'))
+            docker('pull',NODE,timeout=90)
+            state['node_intent']=True; save_state(root,state)
+            ident=docker('container','create','--name',container,'--label','yario.seo1967.owner='+state['nonce'],
+                         '--user','1000:1000','--cap-drop','ALL','--security-opt','no-new-privileges',
+                         '--memory','1g','--cpus','1','--pids-limit','128','--read-only','--tmpfs','/tmp:rw,nosuid,size=128m',
+                         '--mount','type=bind,source='+str(root/'test-context')+',target=/app','--workdir','/app',
+                         '--env','NPM_CONFIG_CACHE=/tmp/npm-cache','--env','NODE_ENV=test',NODE,'sh','-eu','-c',
+                         'node -e \'if (process.versions.node.split(".")[0] !== "22") process.exit(1)\'; npm ci; npm run build; node --test --test-reporter=junit "dist/**/*.test.js" > /app/test-report.xml')
+            require(re.fullmatch('[0-9a-f]{64}',ident)); state['container_id']=ident; save_state(root,state)
+            require(state['test_invocations']==0)
+            state['test_invocations']=1; save_state(root,state)
+            docker('container','start','--attach',ident,timeout=300)
+            require(docker('container','inspect','--format','{{.State.ExitCode}}',ident)=='0')
+            report=case_report(root/'test-context/test-report.xml')
+            (root/'evidence/test-report.xml').write_bytes(report)
+            require(state['test_invocations']==1)
+            state['case_count']=9; state['case_report_sha256']=hashlib.sha256(report).hexdigest(); save_state(root,state)
+            state['phase']='docker-image-build'
+            state['buildx_sha256']=prepare_buildx(root)
+            version=docker('buildx','version',timeout=15)
+            require(re.search(r'\bv0\.30\.1\b',version))
+            state['buildx_version']='0.30.1'; save_state(root,state)
+            state['builder_intent']=True; save_state(root,state)
+            docker('volume','create','--label','yario.seo1967.owner='+state['nonce'],volume)
+            docker('buildx','create','--name',builder,'--driver','docker-container','--driver-opt',
+                   'image='+BUILDKIT+',memory=1g,cpu-period=100000,cpu-quota=100000,env.SEO1967_OWNER='+state['nonce'],
+                   'unix:///var/run/docker.sock')
+            # Both the Docker host flag and the created builder endpoint are explicit;
+            # its config is exclusively owned and never mounted into application tests.
+            state['builder_endpoint_argument']='unix:///var/run/docker.sock'; save_state(root,state)
+            docker('buildx','inspect',builder,'--bootstrap',timeout=90)
+            require(builder_id(builder,state['nonce']) is not None and volume_owned(volume,state['nonce']))
+            state['image_intent']=True; save_state(root,state)
+            docker('buildx','build','--builder',builder,'--load','--tag',image,'--label','yario.seo1967.owner='+state['nonce'],str(root/'build-context'),timeout=300)
+            state['image_id']=image_id(image,state['nonce']); require(state['image_id']); state['build']='PASS'; save_state(root,state)
+
+        def main():
+            parser=argparse.ArgumentParser(); parser.add_argument('--cleanup',action='store_true'); args=parser.parse_args()
+            root,run,attempt=coordinates()
+            global ROOT,DOCKER,PROCESS_ENV
+            ROOT=root; DOCKER=shutil.which('docker'); require(DOCKER)
+            PROCESS_ENV={'PATH':os.environ['PATH'],'HOME':str(root),'LANG':'C.UTF-8','LC_ALL':'C.UTF-8'}
+            state=read_state(root)
+            save_state(root,state)
+            if args.cleanup:
+                cleanup(root,state)
+            else:
+                try:
+                    build(root,state)
+                except Exception as error:
+                    state['build']='FAILED'; state['failure_type']=type(error).__name__; save_state(root,state)
+                    raise
+                finally:
+                    # Preserve a bounded failed/incomplete machine report before scratch removal.
+                    path=root/'test-context/test-report.xml'
+                    try:
+                        info=path.lstat()
+                        if stat.S_ISREG(info.st_mode) and info.st_size<=65536:
+                            descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+                            with os.fdopen(descriptor,'rb') as stream:
+                                (root/'evidence/test-report.xml').write_bytes(stream.read(65537))
+                    except FileNotFoundError:
+                        pass
+                    cleanup(root,state)
+            (root/'evidence/result.json').write_text(json.dumps(state,indent=2)+'\n',encoding='utf-8')
+            print('Trusted existing-runner pipeline and owned cleanup passed')
+
+        if __name__=='__main__':
+            try:
+                main()
+            except Exception:
+                raise SystemExit('Trusted pipeline/cleanup failed; keep state and evidence for bounded recovery')
+        YARIO_CODE
+        echo 'started=true' >> "$GITHUB_OUTPUT"
+        python3 "$root/orchestrator.py"
+    - name: Preserve complete source-bound case/build/cleanup evidence
+      id: evidence
+      if: always() && steps.build.outputs.started == 'true'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: demo-trusted-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |-
+          ${{ runner.temp }}/seo1967-${{ github.run_id }}-${{ github.run_attempt }}/evidence
+          ${{ runner.temp }}/seo1967-${{ github.run_id }}-${{ github.run_attempt }}/state.json
+        if-no-files-found: error
+        retention-days: 7
+    - name: Finalize only owned CI resources and verify Tinyproxy
+      if: always() && steps.build.outputs.started == 'true'
+      env:
+        APP_SOURCE_SHA: ${{ steps.guard.outputs.source_sha }}
+        ARTIFACT_UPLOADED: ${{ steps.evidence.outcome }}
+      run: |
+        python3 - <<'PY'
+        import hashlib,json,os,pathlib,shutil,stat,subprocess
+        root=pathlib.Path(os.environ['RUNNER_TEMP'])/f"seo1967-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+        assert root.resolve()==root and root.is_dir() and root.stat().st_uid==1000
+        helper=root/'orchestrator.py'
+        assert stat.S_ISREG(helper.lstat().st_mode) and helper.stat().st_uid==1000
+        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='79d4ba74aa5a208f752e93031d5dfebb1d7344e52b475c8a3d02d479437d6588'
+        subprocess.run(['python3',str(helper),'--cleanup'],check=True)
+        state=json.loads((root/'state.json').read_text())
+        assert state['cleanup']=='PASS'
+        if os.environ['ARTIFACT_UPLOADED']=='success':
+            assert shutil.rmtree.avoids_symlink_attacks
+            shutil.rmtree(root)
+        print('Owned resources absent; Tinyproxy active; no unrelated prune')
+        PY

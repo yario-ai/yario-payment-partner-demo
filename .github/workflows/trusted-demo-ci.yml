@@ -267,7 +267,7 @@ jobs:
                'source_sha':os.environ['APP_SOURCE_SHA'],'repository':os.environ['GITHUB_REPOSITORY'],
                'caller_context_workflow_sha':os.environ['GITHUB_WORKFLOW_SHA'],'test_invocations':0,'build':'NOT_RUN','cleanup':'NOT_RUN',
                'owning_workflow_path':'.github/workflows/ci.yml' if os.environ['GITHUB_REPOSITORY']=='yario-ai/yario-payment-partner-demo' else '.github/workflows/preflight-existing-demo-build.yml',
-               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'faf565085f80af2f5b68701035eee441df0b4dee961352028d10b8adf0feee70',
+               'owning_event':os.environ['GITHUB_EVENT_NAME'],'orchestration_sha256':'6db626b5550e7ad03e568ebc3d27a751b78e7f8231163a8f0f1308e1d5bac40b',
                'trusted_reusable_sha':os.environ['TRUSTED_REUSABLE_SHA'] or None}
         with open(os.environ['GITHUB_EVENT_PATH'],encoding='utf-8') as stream: event=json.load(stream)
         state['run_head_sha']=event['pull_request']['head']['sha'] if os.environ['GITHUB_EVENT_NAME']=='pull_request' else os.environ['GITHUB_SHA']
@@ -295,10 +295,15 @@ jobs:
         import threading
         import time
         import uuid
+        import urllib.parse
+        import urllib.request
         import xml.etree.ElementTree as ET
 
         NODE = 'node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402'
         BUILDKIT = 'moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea'
+        BUILDX_URL = 'https://github.com/docker/buildx/releases/download/v0.30.1/buildx-v0.30.1.linux-amd64'
+        BUILDX_SHA256 = 'c37114fcd034025ec68e224657c8a5a850df472ded3ddcbca75ad3a7ebb9710d'
+        BUILDX_SIZE = 71069880
         OVERRIDES = ['DOCKER_HOST','DOCKER_CONTEXT','DOCKER_CONFIG','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','BUILDX_BUILDER','BUILDX_CONFIG','BUILDKIT_HOST']
         CASES = {'loads a test-only allowlisted configuration', 'requires an explicit opt-in before resetting test fixtures',
                  'refuses a live key unless explicitly enabled', 'fails closed outside the demo client allowlist',
@@ -309,6 +314,45 @@ jobs:
         def require(value):
             if not value:
                 raise ValueError('trusted orchestration rejected')
+
+
+        class OfficialBuildxRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                target = urllib.parse.urlparse(newurl)
+                require(target.scheme == 'https' and target.hostname in
+                        {'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'}
+                        and target.username is None and target.password is None
+                        and target.port in (None, 443))
+                return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+        def prepare_buildx(root):
+            # This public vendor binary lives only in the owned job config, never on PATH.
+            config = root / 'docker-config'
+            root_metadata(config)
+            plugins = config / 'cli-plugins'
+            plugins.mkdir(mode=0o700)
+            binary = plugins / 'docker-buildx'
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), OfficialBuildxRedirect())
+            digest = hashlib.sha256()
+            size = 0
+            deadline = time.monotonic() + 90
+            prefix = b''
+            with opener.open(BUILDX_URL, timeout=8) as response, binary.open('xb') as output:
+                while True:
+                    require(time.monotonic() < deadline)
+                    chunk = response.read(65536)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    require(size <= BUILDX_SIZE <= 96 * 1024 * 1024)
+                    if len(prefix) < 4:
+                        prefix = (prefix + chunk)[:4]
+                    digest.update(chunk)
+                    output.write(chunk)
+            require(size == BUILDX_SIZE and digest.hexdigest() == BUILDX_SHA256 and prefix == b'\x7fELF')
+            binary.chmod(0o700)
+            return digest.hexdigest()
 
         def coordinates():
             run, attempt = os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_RUN_ATTEMPT']
@@ -589,6 +633,10 @@ jobs:
             require(state['test_invocations']==1)
             state['case_count']=9; state['case_report_sha256']=hashlib.sha256(report).hexdigest(); save_state(root,state)
             state['phase']='docker-image-build'
+            state['buildx_sha256']=prepare_buildx(root)
+            version=docker('buildx','version',timeout=15)
+            require(re.search(r'\bv0\.30\.1\b',version))
+            state['buildx_version']='0.30.1'; save_state(root,state)
             state['builder_intent']=True; save_state(root,state)
             docker('volume','create','--label','yario.seo1967.owner='+state['nonce'],volume)
             docker('buildx','create','--name',builder,'--driver','docker-container','--driver-opt',
@@ -665,7 +713,7 @@ jobs:
         assert root.resolve()==root and root.is_dir() and root.stat().st_uid==1000
         helper=root/'orchestrator.py'
         assert stat.S_ISREG(helper.lstat().st_mode) and helper.stat().st_uid==1000
-        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='faf565085f80af2f5b68701035eee441df0b4dee961352028d10b8adf0feee70'
+        assert hashlib.sha256(helper.read_bytes()).hexdigest()=='6db626b5550e7ad03e568ebc3d27a751b78e7f8231163a8f0f1308e1d5bac40b'
         subprocess.run(['python3',str(helper),'--cleanup'],check=True)
         state=json.loads((root/'state.json').read_text())
         assert state['cleanup']=='PASS'

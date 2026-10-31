@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   verify:
-    uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@782a328e95d01982dcb678cc2ea426b4eb0d32f4
+    uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@ec055d728413a67de88b865fdc2eecca61e4c5c2

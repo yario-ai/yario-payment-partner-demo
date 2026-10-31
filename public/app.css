@@ -28,10 +28,7 @@ button { cursor: pointer; }
 }
 .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 18px; }
 .brand:hover { text-decoration: none; }
-.brand-mark {
-  width: 36px; height: 36px; display: grid; place-items: center; color: white;
-  border-radius: 11px; background: var(--teal); font-weight: 800;
-}
+.brand-logo { display: block; width: auto; height: 36px; }
 nav { display: flex; gap: 22px; align-items: center; }
 .link-button { border: 0; padding: 0; color: var(--teal); background: transparent; font-weight: 650; }
 

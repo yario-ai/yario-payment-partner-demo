@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,16 @@ import type { ConformanceReport } from "./types.js";
 
 const installationId = "11111111-1111-4111-8111-111111111111";
 const clientId = "22222222-2222-4222-8222-222222222222";
+
+// Canonical Yario brand assets (yario-shared knowledge-base/design-system/brand-assets.json).
+const brandAssets: Array<{ path: string; file: string; contentType: string; sha256: string }> = [
+  { path: "/assets/brand/logo-horizontal.svg", file: "public/brand/logo-horizontal.svg", contentType: "image/svg+xml", sha256: "e1a48d3c00e645130542aa0bff086f4865dbf704d6d4f98890cff43f726a2e4c" },
+  { path: "/favicon-v2.ico", file: "public/favicon-v2.ico", contentType: "image/x-icon", sha256: "811645d769b5ce6fe9e104a9ea9635e48e6e0130baf829f94866274e29db7c2e" },
+  { path: "/favicon.ico", file: "public/favicon.ico", contentType: "image/x-icon", sha256: "811645d769b5ce6fe9e104a9ea9635e48e6e0130baf829f94866274e29db7c2e" },
+  { path: "/favicon-16x16.png", file: "public/favicon-16x16.png", contentType: "image/png", sha256: "9a8dc5a66ddbcc00c376cc4ec5795f4156838739b7d0663ea8229855bfb05381" },
+  { path: "/favicon-32x32.png", file: "public/favicon-32x32.png", contentType: "image/png", sha256: "1ac2aab9307db0d26b2e0358aedae9973bbe9885a87bd0571780274c66d83de7" },
+  { path: "/apple-touch-icon.png", file: "public/apple-touch-icon.png", contentType: "image/png", sha256: "bab16378b0002675e400f51630ebe1d0628cd1429f3fe0bf5acedacfb8df12c7" }
+];
 
 function config(root: string): DemoConfig {
   return {
@@ -77,7 +88,24 @@ test("protects the demo, runs once and returns only a redacted public report", a
     const page = await fetch(`${base}/`);
     assert.equal(page.status, 200);
     assert.equal(page.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
-    assert.match(await page.text(), /<meta name="robots" content="noindex,nofollow,noarchive">/);
+    const html = await page.text();
+    assert.match(html, /<meta name="robots" content="noindex,nofollow,noarchive">/);
+    assert.match(html, /<link rel="icon" type="image\/x-icon" sizes="16x16 32x32 48x48" href="\/favicon-v2\.ico">\s*<link rel="icon" type="image\/png" sizes="16x16" href="\/favicon-16x16\.png">\s*<link rel="icon" type="image\/png" sizes="32x32" href="\/favicon-32x32\.png">/);
+    assert.match(html, /<link rel="apple-touch-icon" href="\/apple-touch-icon\.png">/);
+    assert.match(html, /<img class="brand-logo" src="\/assets\/brand\/logo-horizontal\.svg" alt="Yario"/);
+    assert.doesNotMatch(html, /brand-mark/);
+    for (const brand of brandAssets) {
+      // The public demo serves exactly the canonical Yario logo and icons, never a lettered placeholder.
+      const served = await fetch(`${base}${brand.path}`);
+      assert.equal(served.status, 200, brand.path);
+      assert.equal(served.headers.get("content-type"), brand.contentType, brand.path);
+      assert.equal(served.headers.get("cache-control"), "public, max-age=3600", brand.path);
+      const body = Buffer.from(await served.arrayBuffer());
+      const canonical = brand.contentType === "image/svg+xml" ? Buffer.from(body.toString("utf8").replace(/\r\n/g, "\n")) : body;
+      assert.equal(createHash("sha256").update(canonical).digest("hex"), brand.sha256, brand.path);
+      assert.deepEqual(body, await readFile(brand.file), brand.path);
+    }
+    assert.equal((await fetch(`${base}/favicon.svg`)).status, 401, "no legacy square favicon is served");
     const robots = await fetch(`${base}/robots.txt`);
     assert.equal(robots.status, 200);
     assert.match(robots.headers.get("content-type") ?? "", /^text\/plain/);

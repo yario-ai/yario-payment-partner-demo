@@ -12,6 +12,16 @@ const MAX_BODY_BYTES = 16_384;
 const LOGIN_WINDOW_MS = 10 * 60_000;
 const LOGIN_ATTEMPTS = 12;
 
+// Canonical Yario browser icons and logo (yario-shared knowledge-base/design-system/assets).
+const BRAND_FILES = new Map<string, { file: string; contentType: string }>([
+  ["/assets/brand/logo-horizontal.svg", { file: "brand/logo-horizontal.svg", contentType: "image/svg+xml" }],
+  ["/favicon-v2.ico", { file: "favicon-v2.ico", contentType: "image/x-icon" }],
+  ["/favicon.ico", { file: "favicon.ico", contentType: "image/x-icon" }],
+  ["/favicon-16x16.png", { file: "favicon-16x16.png", contentType: "image/png" }],
+  ["/favicon-32x32.png", { file: "favicon-32x32.png", contentType: "image/png" }],
+  ["/apple-touch-icon.png", { file: "apple-touch-icon.png", contentType: "image/png" }]
+]);
+
 export interface DemoAppDependencies {
   config: DemoConfig;
   store: DurableEventStore;
@@ -67,6 +77,8 @@ export function createDemoHandler(deps: DemoAppDependencies) {
       if (request.method === "GET" && url.pathname === "/assets/app.js") {
         return asset(response, join(publicDir, "app.js"), "text/javascript; charset=utf-8");
       }
+      const brand = request.method === "GET" ? BRAND_FILES.get(url.pathname) : undefined;
+      if (brand) return asset(response, join(publicDir, brand.file), brand.contentType);
       if (request.method === "POST" && url.pathname === "/api/session") {
         const key = request.socket.remoteAddress ?? "unknown";
         const recent = (loginAttempts.get(key) ?? []).filter((item) => item > now() - LOGIN_WINDOW_MS);

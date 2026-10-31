@@ -34,7 +34,7 @@ jobs:
         PREFLIGHT_SOURCE = None
         REPOSITORY = 'yario-ai/yario-payment-partner-demo'
         TASK_REF = 'refs/heads/fix/1967-redfox-jev-seo'
-        APP_FINGERPRINT = '4218f6fdd88a1e10c584e0668707570930dc6ac87fde5b6c0c7ac1b7b976328a'
+        APP_FINGERPRINT = '4dab7baf86b5289f07c76a56caf5aca429347d5e0c1e6dc178dffde3ef7b819f'
         WORKFLOWS = {'.github/workflows/ci.yml', '.github/workflows/trusted-demo-ci.yml'}
 
         def require(condition):

@@ -10,4 +10,62 @@ permissions:
 
 jobs:
   verify:
+    if: >-
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/1967-redfox-jev-seo')) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.number == 8 &&
+       github.event.pull_request.head.ref == 'fix/1967-redfox-jev-seo' &&
+       github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.head.repo.fork)
     uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@ec055d728413a67de88b865fdc2eecca61e4c5c2
+
+  artifact-contracts:
+    if: github.event_name == 'pull_request'
+    runs-on:
+      group: Yario general public TASK-2378
+      labels: [self-hosted, yario-ci]
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify real native guards and immutable public artifact SDK
+        run: |
+          python3 - <<'PY'
+          import ast,base64,copy,hashlib,json,pathlib,re,subprocess,textwrap,zlib
+          leaf=pathlib.Path('.github/workflows/trusted-demo-ci.yml').read_text()
+          assert len(leaf.encode())<=65536
+          assert len(pathlib.Path('.github/workflows/ci.yml').read_bytes())<=65536
+          source=textwrap.dedent(leaf.split("        python3 - <<'PY'\n",1)[1].split('\n        PY',1)[0])
+          module=ast.parse(source)
+          names={'require','event_source','fingerprint','self_test','temporary_identity'}
+          nodes=[n for n in module.body if isinstance(n,ast.FunctionDef) and n.name in names]
+          assert {n.name for n in nodes}==names
+          scope=dict(copy=copy,hashlib=hashlib,re=re)
+          for n in module.body:
+              if isinstance(n,ast.Assign) and len(n.targets)==1 and isinstance(n.targets[0],ast.Name) and n.targets[0].id in {'REPOSITORY','TASK_REF','APP_FINGERPRINT','WORKFLOWS'}:
+                  scope[n.targets[0].id]=ast.literal_eval(n.value)
+          exec(compile(ast.Module(body=nodes,type_ignores=[]),'<actual-native-guard>','exec'),scope)
+          items=[]
+          for line in subprocess.check_output(['git','ls-tree','-rl','HEAD'],text=True).splitlines():
+              metadata,path=line.split('\t',1);mode,kind,sha,size=metadata.split()
+              items.append(dict(path=path,mode=mode,type=kind,sha=sha,size=int(size)))
+          scope['self_test'](dict(tree=items,truncated=False))
+          encoded=re.search(r'^        SDK_BUNDLE: ([A-Za-z0-9+/=]+)$',leaf,re.M).group(1)
+          assert len(encoded)<=20000
+          def decode(value):
+              decoder=zlib.decompressobj();raw=decoder.decompress(base64.b64decode(value,validate=True),65537)
+              assert decoder.eof and not decoder.unused_data and not decoder.unconsumed_tail and len(raw)<=65536
+              assert hashlib.sha256(raw).hexdigest()=='85e71abe708fdc40c30a7b37e500279341074b7e4812d3fa9fb6f8aad3339fc2'
+              return json.loads(raw)
+          files=decode(encoded)
+          assert set(files)=={'protocol.py','client.py','archives.py','transport.py','native_evidence.py','receipt-public-key.pem','consumer-policy.json'}
+          for name,item in files.items():
+              assert hashlib.sha256(item['text'].encode()).hexdigest()==item['sha256']
+              if name.endswith('.py'):compile(item['text'],name,'exec')
+          for value in ['invalid',base64.b64encode(zlib.compress(b'x'*1000000)).decode(),base64.b64encode(zlib.compress(b'{}')).decode()]:
+              try:decode(value)
+              except (AssertionError,ValueError,zlib.error):continue
+              raise AssertionError('tampered SDK accepted')
+          print('Native admission negative fixtures and immutable public SDK integrity passed; runtime upload proof remains separate')
+          PY

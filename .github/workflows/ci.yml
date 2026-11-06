@@ -15,7 +15,10 @@ jobs:
       (github.event_name == 'pull_request' && github.event.pull_request.number == 8 &&
        github.event.pull_request.head.ref == 'fix/1967-redfox-jev-seo' &&
        github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.head.repo.fork)
-    uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@ec055d728413a67de88b865fdc2eecca61e4c5c2
+    permissions:
+      contents: read
+      id-token: write
+    uses: yario-ai/yario-payment-partner-demo/.github/workflows/trusted-demo-ci.yml@8586d836b73abffabd0262b3532fcf059ebe71ea
 
   artifact-contracts:
     if: github.event_name == 'pull_request'
